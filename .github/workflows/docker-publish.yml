@@ -15,7 +15,7 @@ on:
 
 env:
   IMAGE_NAME: "muen/salt"
-  IMAGE_TAG: "3006.10-python3.10-alpine3.21"
+  IMAGE_TAG: "3006.10-python3.10"
 
 jobs:
   docker:
