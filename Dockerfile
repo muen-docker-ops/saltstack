@@ -29,7 +29,8 @@ RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel packaging
 RUN echo "cython<3" > /tmp/constraint.txt
 
 # 安装 msgpack，解决 salt 依赖
-RUN pip3 install --no-cache-dir "msgpack==1.0.5"
+RUN pip3 install --no-cache-dir "yaml" && \
+    pip3 install --no-cache-dir "msgpack==1.0.5"
 
 # 安装 salt
 RUN PIP_CONSTRAINT=/tmp/constraint.txt USE_STATIC_REQUIREMENTS=1 \
