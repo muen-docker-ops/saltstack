@@ -10,17 +10,16 @@ RUN groupadd -g 450 salt && useradd -u 450 -g salt -s /bin/sh -M salt \
     && chmod -R 2775 /etc/pki /etc/salt /var/cache/salt /var/log/salt /var/run/salt \
     && chgrp -R salt /etc/pki /etc/salt /var/cache/salt /var/log/salt /var/run/salt
 
+RUN apt-get update && apt-get install -y dumb-init && rm -rf /var/lib/apt/lists/*
+
 RUN echo "cython<3" > /tmp/constraint.txt
 RUN PIP_CONSTRAINT=/tmp/constraint.txt USE_STATIC_REQUIREMENTS=1 pip3 install --no-build-isolation --no-cache-dir salt=="${SALT_VERSION}"
 RUN su - salt -c 'salt-run salt.cmd tls.create_self_signed_cert'
 
-# 拷贝启动脚本
 ADD saltinit.py /usr/local/bin/saltinit
 
-# 设置容器启动
 ENTRYPOINT ["/usr/bin/dumb-init"]
 CMD ["/usr/local/bin/saltinit"]
 
-# 端口 & 挂载
 EXPOSE 4505 4506 8000
 VOLUME /etc/salt/pki/
