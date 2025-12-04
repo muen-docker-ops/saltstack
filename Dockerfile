@@ -1,7 +1,8 @@
 FROM debian:12-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV SALT_VERSION="3007.6"
+ARG SALT_VERSION
+ENV SALT_VERSION=${SALT_VERSION}
 
 # ---------------------------------------
 # Basic packages & dumb-init
