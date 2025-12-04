@@ -1,25 +1,71 @@
-FROM python:3.10-bookworm
+FROM debian:12-slim
 
-ENV SALT_VERSION=3006.10
-ENV TZ="Asia/Shanghai"
+ENV DEBIAN_FRONTEND=noninteractive
+ENV SALT_VERSION="3007.6"
 
-RUN groupadd -g 450 salt && useradd -u 450 -g salt -s /bin/sh -M salt \
-    && mkdir -p /etc/pki /etc/salt/pki \
-             /etc/salt/minion.d /etc/salt/master.d /etc/salt/proxy.d \
-             /var/cache/salt /var/log/salt /var/run/salt \
-    && chmod -R 2775 /etc/pki /etc/salt /var/cache/salt /var/log/salt /var/run/salt \
-    && chgrp -R salt /etc/pki /etc/salt /var/cache/salt /var/log/salt /var/run/salt
+# ---------------------------------------
+# Basic packages & dumb-init
+# ---------------------------------------
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl gnupg2 dumb-init python3 python3-pip netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && apt-get install -y dumb-init && rm -rf /var/lib/apt/lists/*
+# ---------------------------------------
+# Add Salt official key + salt.sources
+# ---------------------------------------
+RUN mkdir -p /etc/apt/keyrings && \
+    curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public \
+        | tee /etc/apt/keyrings/salt-archive-keyring.pgp > /dev/null
 
-RUN echo "cython<3" > /tmp/constraint.txt
-RUN PIP_CONSTRAINT=/tmp/constraint.txt USE_STATIC_REQUIREMENTS=1 pip3 install --no-build-isolation --no-cache-dir salt=="${SALT_VERSION}"
-RUN su - salt -c 'salt-run salt.cmd tls.create_self_signed_cert'
+RUN curl -fsSL https://github.com/saltstack/salt-install-guide/releases/latest/download/salt.sources \
+        | tee /etc/apt/sources.list.d/salt.sources > /dev/null
 
-ADD saltinit.py /usr/local/bin/saltinit
+# ---------------------------------------
+# Pin SALT version
+# ---------------------------------------
+RUN echo "Package: salt-*\n\
+Pin: version ${SALT_VERSION}*\n\
+Pin-Priority: 1001" \
+    > /etc/apt/preferences.d/salt-pin-1001
 
-ENTRYPOINT ["/usr/bin/dumb-init"]
+# ---------------------------------------
+# Create user & dirs
+# ---------------------------------------
+RUN groupadd -g 450 salt || true && \
+    useradd -u 450 -g salt -s /bin/bash -M salt || true && \
+    mkdir -p /etc/salt/master.d /etc/salt/minion.d /etc/pki/tls/certs
+
+
+# ---------------------------------------
+# Install Salt packages
+# ---------------------------------------
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        salt-master=${SALT_VERSION}* \
+        salt-api=${SALT_VERSION}* \
+        salt-ssh=${SALT_VERSION}* \
+        salt-syndic=${SALT_VERSION}* \
+    && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------
+# Add saltinit.py
+# ---------------------------------------
+COPY saltinit.py /usr/local/bin/saltinit
+RUN chmod +x /usr/local/bin/saltinit
+
+# ---------------------------------------
+# Ports
+# ---------------------------------------
+EXPOSE 4505 4506 8000
+
+# ---------------------------------------
+# ENTRYPOINT + CMD
+# ---------------------------------------
+ENTRYPOINT ["/usr/bin/dumb-init", "--"]
 CMD ["/usr/local/bin/saltinit"]
 
-EXPOSE 4505 4506 8000
-VOLUME /etc/salt/pki/
+# ---------------------------------------
+# HEALTHCHECK
+# ---------------------------------------
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD nc -z 127.0.0.1 4505 && nc -z 127.0.0.1 8000 || exit 1
